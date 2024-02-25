@@ -30,10 +30,11 @@ cd whatsapp-online-status-tracker
 
 ```bash
 google-chrome --user-data-dir=~/chrome-profile                                                                                                                                                                                                          ```
-
+```
 Navigate to WhatsApp Web in the new Chrome instance, authenticate, and optionally install extensions like WhatsApp Plus to hide blue checkmarks.
 
 3. Install the Python dependencies:
+
 ```bash
 pip install -r requirements.txt
 ```
