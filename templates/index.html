@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WhatsApp Status Checker</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script><title>WhatsApp Status Checker</title>
 </head>
 <body>
     <h1>Check WhatsApp Status</h1>
@@ -13,7 +13,41 @@
         <button type="submit">Check Status</button>
     </form>
     <form action="/start_whatsapp_session" method="post">
-        <button type="submit">Start WhatsApp Web Session</button>
+        <button type="submit">Start WhatsApp Web Session</button>w
     </form>
+
+    <canvas id="myChart"></canvas>
+    <script>
+        fetch('/get_status/name')  // replace 'name' with the actual name
+    .then(response => response.json())
+    .then(data => {
+        const ctx = document.getElementById('myChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Online Duration', 'Offline Duration'],
+                datasets: [{
+                    label: 'Duration in seconds',
+                    data: [data.online_duration, data.offline_duration],
+                    backgroundColor: [
+                        'rgba(75, 192, 192, 0.2)',
+                        'rgba(255, 99, 132, 0.2)'
+                    ],
+                    borderColor: [
+                        'rgba(75, 192, 192, 1)',
+                        'rgba(255, 99, 132, 1)'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    });</script>
 </body>
 </html>

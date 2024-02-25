@@ -1,4 +1,3 @@
-
 from flask import Flask, render_template, request, jsonify
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -51,7 +50,7 @@ def check_status():
 
     try:
         # Wait until the name element is present in the DOM
-        wait = WebDriverWait(driver, 10)  # wait for up to 10 seconds
+        wait = WebDriverWait(driver, 15)  # wait for up to 10 seconds
         name_element = wait.until(EC.presence_of_element_located((By.XPATH, f"//span[contains(text(), '{name}')]")))
         name_element.click()
 
@@ -66,12 +65,14 @@ def check_status():
                     online_start_time = datetime.now()
                 online_duration = datetime.now() - online_start_time
                 logging.info(f"Online since: {online_start_time}, Duration: {online_duration}")
+                print(f"Status: {status}, Online since: {online_start_time}, Duration: {online_duration}")
             except:
                 status = "Offline"
                 if offline_start_time is None:
                     offline_start_time = datetime.now()
                 offline_duration = datetime.now() - offline_start_time
                 logging.info(f"Offline since: {offline_start_time}, Duration: {offline_duration}")
+                print(f"Status: {status}, Offline since: {offline_start_time}, Duration: {offline_duration}")
 
             # Update the status data
             status_data[name] = {
