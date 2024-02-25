@@ -17,6 +17,8 @@ This tool starts up a Chrome (driver) instance and goes to WhatsApp Web. You don
 
 ## Run Locally
 
+btw,runs fine on my machine. Linux, PopOS.
+
 1. Clone the project:
 
 ```bash
@@ -27,8 +29,7 @@ cd whatsapp-online-status-tracker
 2. Create a new Chrome profile:
 
 ```bash
-google-chrome --user-data-dir=/path/to/your/new/profile
-```
+google-chrome --user-data-dir=~/chrome-profile                                                                                                                                                                                                          ```
 
 Navigate to WhatsApp Web in the new Chrome instance, authenticate, and optionally install extensions like WhatsApp Plus to hide blue checkmarks.
 
@@ -48,4 +49,4 @@ Now, you can navigate to `http://localhost:5000` in your web browser to use the 
 
 ### Roadmap
 
-I have a React/NextJS api route working which i might make avaialble someday. Also displaying  data e.g. logging doesn't do anything on the front-end. Logs are filled in json format so u can api yourself in the root.
+I have a React/NextJS API route working which I might make available someday. Also displaying data, e.g. logging, doesn't do anything on the front-end. Logs are filled in JSON format so you can API yourself in the root.
