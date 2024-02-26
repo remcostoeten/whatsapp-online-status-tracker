@@ -1,3 +1,5 @@
 status_data.json
 app.log
 ~/chrome-profile/
+.vercel
+__pycache__/app.cpython-310.pyc
