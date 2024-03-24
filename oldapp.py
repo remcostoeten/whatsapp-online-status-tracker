@@ -10,17 +10,20 @@ from datetime import datetime
 import time
 import logging
 import threading
-from pythonjsonlogger import jsonlogger
 
 app = Flask(__name__)
 
-# Configure logging to use JSON format
-logHandler = logging.StreamHandler()
-formatter = jsonlogger.JsonFormatter()
-logHandler.setFormatter(formatter)
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('app.log'),
+        logging.StreamHandler()
+    ]
+)
+
 logger = logging.getLogger()
-logger.addHandler(logHandler)
-logger.setLevel(logging.INFO)
 
 # Global variable to store the status data
 status_data = {}
@@ -79,7 +82,7 @@ def update_status(name):
             status_text = status_element.text
 
             # Determine the online status based on the text
-            status = "Online" if status_text == "Â· â�¡" else "Offline"
+            status = "Online" if status_text == "· ♡" else "Offline"
 
             # Update the status data
             status_data[name] = {
