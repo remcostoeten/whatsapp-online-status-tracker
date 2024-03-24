@@ -1,4 +1,3 @@
-
 from flask import Flask, render_template, request, jsonify
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -23,6 +22,15 @@ logging.basicConfig(filename='app.log', filemode='w', format='%(name)s - %(level
 
 # Global variable to store the status data
 status_data = {}
+
+@app.before_request
+def log_request_info():
+    app.logger.info('Processing default request path=%s, method=%s, body=%s, headers=%s', request.path, request.method, request.get_data(), dict(request.headers))
+
+@app.after_request
+def after_request(response):
+    app.logger.info('Response: status=%s, body=%s, headers=%s', response.status, response.get_data(), dict(response.headers))
+    return response
 
 @app.route("/check_status", methods=["POST"])
 def check_status():
