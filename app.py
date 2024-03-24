@@ -1,5 +1,4 @@
 from flask import Flask, render_template, request, jsonify
-from flask_sqlalchemy import SQLAlchemy
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
@@ -11,45 +10,109 @@ from datetime import datetime
 import time
 import logging
 import threading
+from pythonjsonlogger import jsonlogger
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///status.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db = SQLAlchemy(app)
 
-class Status(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), nullable=False)
-    status = db.Column(db.String(10), nullable=False)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+# Configure logging to use JSON format
+logHandler = logging.StreamHandler()
+formatter = jsonlogger.JsonFormatter()
+logHandler.setFormatter(formatter)
+logger = logging.getLogger()
+logger.addHandler(logHandler)
+logger.setLevel(logging.INFO)
 
-@app.before_first_request
-def create_tables():
-    db.create_all()
+# Global variable to store the status data
+status_data = {}
+driver = None
 
-# Assuming there are existing app setup and routes here, which were not provided.
-# The provided content does not include specific route handlers or the logic within them,
-# so we'll assume there's a basic structure for handling requests and updating status.
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+@app.route("/check_status", methods=["POST"])
+def check_status():
+    global status_data
+    global driver
+
+    name = request.form.get("name")
+
+    # Path to the new Chrome profile
+    profile_path = '~/chrome-profile'
+
+    # Configure Chrome options
+    chrome_options = Options()
+    chrome_options.add_argument(f'user-data-dir={profile_path}')
+
+    webdriver_service = Service(ChromeDriverManager().install())
+
+    driver = webdriver.Chrome(service=webdriver_service, options=chrome_options)
+
+    try:
+        driver.get("https://web.whatsapp.com/")
+        logger.info("WhatsApp Web opened successfully")
+
+        # Wait for QR code to be scanned and page loaded
+        WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.CSS_SELECTOR, "div._1VwoK")))
+
+        # Start the status update thread
+        threading.Thread(target=update_status, args=(name,)).start()
+
+        return "Status update started"
+
+    except Exception as e:
+        logger.error(f"An error occurred: {e}")
+        if driver:
+            driver.quit()
+        return "An error occurred: " + str(e), 500
 
 def update_status(name):
+    global status_data
     global driver
+
     try:
         while True:
-            # Placeholder for existing code to check status...
-            # Assuming there's logic here to interact with a web page using Selenium
-            # and extract the online status of a given name.
-            status = "Online"  # Placeholder for actual status checking logic
-            new_status = Status(name=name, status=status, timestamp=datetime.now())
-            db.session.add(new_status)
-            db.session.commit()
+            # Get the element with the ID "contact-status"
+            status_element = driver.find_element(By.ID, "contact-status")
+
+            # Extract the text content
+            status_text = status_element.text
+
+            # Determine the online status based on the text
+            status = "Online" if status_text == "Â· â�¡" else "Offline"
+
+            # Update the status data
+            status_data[name] = {
+                "status": status,
+                "timestamp": str(datetime.now())
+            }
+
+            # Sleep for 5 seconds before checking again
             time.sleep(5)
+
     except Exception as e:
         logger.error(f"An error occurred in update_status: {e}")
         if driver:
             driver.quit()
 
-# Placeholder for additional routes for reporting and handling multiple numbers...
-# This would include Flask route handlers to display reports and manage multiple tracking sessions.
+@app.route("/stop_checking", methods=["POST"])
+def stop_checking():
+    global driver
+
+    if driver:
+        driver.quit()
+        return "Status update stopped"
+    else:
+        return "No status update in progress", 404
+
+@app.route("/get_status/<name>", methods=["GET"])
+def get_status(name):
+    global status_data
+
+    if name in status_data:
+        return jsonify(status_data[name])
+    else:
+        return jsonify({"error": "No data for this name"}), 404
 
 if __name__ == "__main__":
     app.run(debug=True)
