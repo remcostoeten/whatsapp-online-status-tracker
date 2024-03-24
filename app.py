@@ -1,3 +1,4 @@
+
 from flask import Flask, render_template, request, jsonify
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -9,33 +10,24 @@ from selenium.webdriver.chrome.options import Options
 from datetime import datetime
 import time
 import logging
-import threading
-from pythonjsonlogger import jsonlogger
+import json
 
 app = Flask(__name__)
-
-# Configure logging to use JSON format
-logHandler = logging.StreamHandler()
-formatter = jsonlogger.JsonFormatter()
-logHandler.setFormatter(formatter)
-logger = logging.getLogger()
-logger.addHandler(logHandler)
-logger.setLevel(logging.INFO)
-
-# Global variable to store the status data
-status_data = {}
-driver = None
 
 @app.route("/")
 def index():
     return render_template("index.html")
 
+# Configure logging
+logging.basicConfig(filename='app.log', filemode='w', format='%(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+
+# Global variable to store the status data
+status_data = {}
+
 @app.route("/check_status", methods=["POST"])
 def check_status():
     global status_data
-    global driver
-
-    name = request.form.get("name")
+    name = request.form["name"]
 
     # Path to the new Chrome profile
     profile_path = '~/chrome-profile'
@@ -45,74 +37,78 @@ def check_status():
     chrome_options.add_argument(f'user-data-dir={profile_path}')
 
     webdriver_service = Service(ChromeDriverManager().install())
-
     driver = webdriver.Chrome(service=webdriver_service, options=chrome_options)
 
     try:
+        # Open the WhatsApp Web URL
         driver.get("https://web.whatsapp.com/")
-        logger.info("WhatsApp Web opened successfully")
-
-        # Wait for QR code to be scanned and page loaded
-        WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.CSS_SELECTOR, "div._1VwoK")))
-
-        # Start the status update thread
-        threading.Thread(target=update_status, args=(name,)).start()
-
-        return "Status update started"
-
+        logging.info("WhatsApp Web opened successfully")
     except Exception as e:
-        logger.error(f"An error occurred: {e}")
-        if driver:
-            driver.quit()
+        # Handle potential errors during script execution
+        logging.error(f"An error occurred: {e}")
+        driver.quit()
         return "An error occurred: " + str(e), 500
 
-def update_status(name):
-    global status_data
-    global driver
-
     try:
+        # Wait until the name element is present in the DOM
+        wait = WebDriverWait(driver, 25)  # wait for up to 10 seconds
+        name_element = wait.until(EC.presence_of_element_located((By.XPATH, f"//span[contains(text(), '{name}')]")))
+        name_element.click()
+
+        online_start_time = None
+        offline_start_time = None
+
         while True:
-            # Get the element with the ID "contact-status"
-            status_element = driver.find_element(By.ID, "contact-status")
-
-            # Extract the text content
-            status_text = status_element.text
-
-            # Determine the online status based on the text
-            status = "Online" if status_text == "Â· â�¡" else "Offline"
+            try:
+                online_indicator = driver.find_element(By.XPATH, "//span[contains(text(), 'online')]")
+                status = "Online"
+                if online_start_time is None:
+                    online_start_time = datetime.now()
+                online_duration = datetime.now() - online_start_time
+                logging.info(f"Online since: {online_start_time}, Duration: {online_duration}")
+            except:
+                status = "Offline"
+                if offline_start_time is None:
+                    offline_start_time = datetime.now()
+                offline_duration = datetime.now() - offline_start_time
+                logging.info(f"Offline since: {offline_start_time}, Duration: {offline_duration}")
 
             # Update the status data
             status_data[name] = {
                 "status": status,
-                "timestamp": str(datetime.now())
+                "online_duration": str(online_duration) if online_start_time else None,
+                "offline_duration": str(offline_duration) if offline_start_time else None
             }
 
-            # Sleep for 5 seconds before checking again
-            time.sleep(5)
+            # Save the status data to a JSON file
+            with open('status_data.json', 'w') as f:
+                json.dump(status_data, f)
+
+            time.sleep(5)  # waait for 5 seconds before checking the status again
+
+            try:
+                auth_button = driver.find_element(By.XPATH, "//button[contains(text(), 'I am authenticated')]")
+                break  # exit the loop if the authentication button is found
+            except:
+                pass
+
+        # Script execution successful, close the driver
+        driver.quit()
+        return render_template("result.html", name=name, status=status, online_duration=online_duration if online_start_time else None, offline_duration=offline_duration if offline_start_time else None)
 
     except Exception as e:
-        logger.error(f"An error occurred in update_status: {e}")
-        if driver:
-            driver.quit()
-
-@app.route("/stop_checking", methods=["POST"])
-def stop_checking():
-    global driver
-
-    if driver:
+        # Handle potential errors during script execution
+        logging.error(f"An error occurred: {e}")
         driver.quit()
-        return "Status update stopped"
-    else:
-        return "No status update in progress", 404
+        return "An error occurred: " + str(e), 500  # Return an error message and a 500 status code
 
 @app.route("/get_status/<name>", methods=["GET"])
 def get_status(name):
     global status_data
-
     if name in status_data:
         return jsonify(status_data[name])
     else:
         return jsonify({"error": "No data for this name"}), 404
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port = '5001')
