@@ -13,16 +13,44 @@ import os
 import json
 from pathlib import Path
 from pythonjsonlogger import jsonlogger
+import sys
+import traceback
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service as ChromeService
 
-app = Flask(__name__)
+class CustomJsonFormatter(jsonlogger.JsonFormatter):
+    def add_fields(self, log_record, record, message_dict):
+        super(CustomJsonFormatter, self).add_fields(log_record, record, message_dict)
+        if not log_record.get('severity'):
+            log_record['severity'] = record.levelname
+        if not log_record.get('message') and record.msg:
+            log_record['message'] = record.msg
 
 # Configure logging
-logHandler = logging.StreamHandler()
-formatter = jsonlogger.JsonFormatter()
-logHandler.setFormatter(formatter)
 logger = logging.getLogger()
+logHandler = logging.StreamHandler()
+
+# Custom formatter that will ignore Flask's werkzeug logs
+formatter = CustomJsonFormatter(
+    '%(severity)s %(message)s',
+    json_ensure_ascii=False
+)
+logHandler.setFormatter(formatter)
 logger.addHandler(logHandler)
 logger.setLevel(logging.INFO)
+
+# Add this to suppress Flask's default logging
+werkzeug_logger = logging.getLogger('werkzeug')
+werkzeug_logger.disabled = True
+
+# Modify Flask's logging
+cli = sys.modules.get('flask.cli')
+if cli is not None:
+    cli.show_server_banner = lambda *args: None
+
+app = Flask(__name__)
+app.logger.handlers = []
+app.logger.propagate = False
 
 # Global variables
 status_data = {}
@@ -36,9 +64,9 @@ def load_saved_data():
         if os.path.exists(data_file):
             with open(data_file, 'r') as f:
                 status_data = json.load(f)
-            logger.info("Loaded saved status data")
+            logger.info("Status data loaded successfully")
     except Exception as e:
-        logger.error(f"Error loading saved data: {e}")
+        logger.error(f"Error loading saved data: {str(e)}")
 
 # Save data periodically
 def save_data():
@@ -50,23 +78,38 @@ def save_data():
     except Exception as e:
         logger.error(f"Error saving data: {e}")
 
-def initialize_driver():
+def create_driver():
     try:
+        chrome_profile_dir = os.path.join(os.path.expanduser("~"), "ChromeProfile")
+        
+        # Check if Chrome profile directory exists
+        if not os.path.exists(chrome_profile_dir):
+            os.makedirs(chrome_profile_dir)
+            logger.info(f"Created Chrome profile directory at {chrome_profile_dir}")
+            
         chrome_options = Options()
+        chrome_options.add_argument(f"user-data-dir={chrome_profile_dir}")
+        chrome_options.add_argument("--disable-notifications")
+        chrome_options.add_argument("--disable-popup-blocking")
+        chrome_options.add_argument("--disable-background-timer-throttling")
+        chrome_options.add_argument("--disable-renderer-backgrounding")
+        chrome_options.add_argument("--disable-backgrounding-occluded-windows")
+        # Add these options to help prevent crashes
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
-        # chrome_options.add_argument("--headless")  # Uncomment for headless mode
         
-        # Try to use system ChromeDriver first
-        driver_path = "/usr/local/bin/chromedriver"
-        if not os.path.exists(driver_path):
-            driver_path = "/usr/bin/chromedriver"
+        # Use webdriver_manager to handle driver installation
+        service = ChromeService(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=chrome_options)
         
-        service = Service(executable_path=driver_path)
-        return webdriver.Chrome(service=service, options=chrome_options)
+        # Set window size and position
+        driver.set_window_rect(0, 0, 800, 600)
+        
+        return driver
+        
     except Exception as e:
-        logger.error(f"Error initializing driver: {str(e)}")
-        raise
+        logger.error(f"Error creating Chrome driver: {str(e)}")
+        raise Exception(f"Failed to create Chrome driver: {str(e)}")
 
 def select_contact(driver, contact_name):
     try:
@@ -125,7 +168,7 @@ def check_status():
             return jsonify({"error": "Name is required"}), 400
 
         # Initialize driver and WhatsApp
-        driver = initialize_driver()
+        driver = create_driver()
         driver.get("https://web.whatsapp.com/")
         logger.info("WhatsApp Web opened")
 
@@ -175,11 +218,21 @@ def update_status(name):
     try:
         while driver:
             try:
-                # Check online status
+                # Periodically refresh the visibility override
+                driver.execute_script("""
+                document.dispatchEvent(new Event('visibilitychange'));
+                document.dispatchEvent(new Event('focus'));
+                """)
+                
+                # Updated online status indicators with more specific selectors
                 online_indicators = [
-                    "//span[contains(text(), 'online')]",
-                    "//span[contains(text(), 'typing')]",
-                    "//span[contains(@title, 'online')]"
+                    "//span[contains(@title, 'online')]",
+                    "//span[contains(@title, 'typing...')]",
+                    "//span[text()='online']",
+                    "//span[text()='typing...']",
+                    "//div[contains(@class, '_3vPI2')]//span[contains(text(), 'online')]",
+                    "//div[contains(@class, 'zzgSd')]//span[contains(text(), 'online')]",
+                    "//div[contains(@class, 'YmixP')]//span[contains(text(), 'online')]"
                 ]
                 
                 is_online = False
@@ -188,24 +241,54 @@ def update_status(name):
                         elements = driver.find_elements(By.XPATH, indicator)
                         if elements:
                             is_online = True
+                            logger.info(f"Online status detected via selector: {indicator}")
                             break
-                    except:
+                    except Exception as e:
+                        logger.error(f"Error checking indicator {indicator}: {str(e)}")
                         continue
+                
+                # Force focus on the chat window
+                driver.execute_script("""
+                // Force focus on chat window
+                document.querySelector('div[tabindex="-1"]')?.focus();
+                // Ensure chat is visible
+                document.querySelector('div[data-tab="1"]')?.scrollIntoView();
+                """)
                 
                 current_time = datetime.now()
                 status = "Online" if is_online else "Offline"
                 
+                # Debug logging
+                logger.info(f"Current status for {name}: {status}")
+                
                 # Update current status
+                if name not in status_data:
+                    status_data[name] = {
+                        'history': [],
+                        'statistics': {
+                            'total_time': 0,
+                            'online_time': 0,
+                            'status_changes': 0
+                        },
+                        'current': {
+                            'status': 'Unknown',
+                            'timestamp': current_time.isoformat()
+                        }
+                    }
+                
                 status_data[name]['current'] = {
                     'status': status,
                     'timestamp': current_time.isoformat()
                 }
                 
-                # Add to history if status changed or 5 minutes passed
-                if (not status_data[name]['history'] or 
+                # Fixed parentheses in the condition check
+                should_update = (
+                    not status_data[name]['history'] or 
                     status_data[name]['history'][-1]['status'] != status or 
-                    (current_time - datetime.fromisoformat(status_data[name]['history'][-1]['timestamp'].replace('Z', '+00:00'))).total_seconds() > 300):
-                    
+                    (current_time - datetime.fromisoformat(status_data[name]['history'][-1]['timestamp'].replace('Z', '+00:00'))).total_seconds() > 300
+                )
+                
+                if should_update:
                     status_data[name]['history'].append({
                         'status': status,
                         'timestamp': current_time.isoformat()
@@ -225,13 +308,9 @@ def update_status(name):
                     save_interval = 0
                 
             except Exception as e:
-                logger.error(f"Error updating status: {str(e)}")
-                status_data[name]['current'] = {
-                    'status': 'Error',
-                    'timestamp': datetime.now().isoformat()
-                }
+                logger.error(f"Error in update_status: {str(e)}")
             
-            time.sleep(5)
+            time.sleep(2)
             
     except Exception as e:
         logger.error(f"Fatal error in update_status: {str(e)}")
@@ -356,7 +435,6 @@ def get_history(name):
         'total': len(history),
         'has_more': end_idx < len(history)
     })
-
 @app.route("/clear_data/<name>", methods=["POST"])
 def clear_data(name):
     global status_data
@@ -367,5 +445,36 @@ def clear_data(name):
     return jsonify({"error": "No data found for this name"}), 404
 
 if __name__ == "__main__":
-    load_saved_data()
-    app.run(debug=True)
+    try:
+        # Configure logging first
+        logging.basicConfig(level=logging.ERROR)
+        werkzeug_logger = logging.getLogger('werkzeug')
+        werkzeug_logger.disabled = True
+        app.logger.disabled = True
+        
+        # Load data
+        load_saved_data()
+        
+        startup_message = f"""
+\033[38;5;196mW\033[38;5;202mh\033[38;5;208ma\033[38;5;214mt\033[38;5;220ms\033[38;5;226mA\033[38;5;190mp\033[38;5;154mp\033[38;5;118m Status \033[38;5;82mTracker \033[38;5;196m⚠️  Not supported anymore
+
+\033[38;5;51mAuthor: \033[38;5;227m@remcostoeten
+\033[38;5;51mGitHub: \033[38;5;227mhttps://github.com/remcostoeten
+
+\033[38;5;213mTech Stack:
+\033[38;5;159m• Backend:  Python + Flask
+\033[38;5;159m• Frontend: HTML + Tailwind + Chart.js
+
+\033[38;5;213mApplication running at: \033[38;5;159mhttp://localhost:5000\033[0m
+"""
+        print(startup_message)
+        
+        # Start the Flask app with minimal logging
+        app.run(debug=False, host="127.0.0.1", port=5000)
+        
+    except Exception as e:
+        print("\033[91mError starting server:\033[0m")
+        print(f"\033[91m{str(e)}\033[0m")
+        print("\nFull traceback:")
+        traceback.print_exc()
+        sys.exit(1)

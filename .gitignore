@@ -5,3 +5,4 @@ app.log
 __pycache__/app.cpython-310.pyc
 ~/chrome-profile/
 status_history.json
+*ChromeProfile*

@@ -13,7 +13,7 @@ This tool starts up a Chrome (driver) instance and goes to WhatsApp Web. You don
 > This project is no longer actively maintained. Feel free to fork and adapt for your needs.
 <small>Works on my machine which is PopOS (ubuntu) with these versions.</small>
 
-```bah
+```bash
 pop-os% chromedriver --v ; python3 --version ; pip --version
 ChromeDriver 130.0.6723.0 (ed44bc873f9ef776a2ef1ccb90252a6de5666cd6-refs/branch-heads/6723@{#1})
 Python 3.10.12
@@ -21,13 +21,12 @@ pip 22.0.2 from /usr/lib/python3/dist-packages/pip (python 3.10)
 ```
 glhf
 
-
 ## Running the app
-```python
-pip install requirements.txt
-#or pip3. If having issues look into app.py, copy the imports into chatgpt and ask for pip intalls
+```bash
+pip install -r requirements.txt
+# or pip3. If having issues, look into app.py, copy the imports into chatgpt and ask for pip installs
 ```
-Then you should be able to run the app with `python app.py` which then serves a server on `localhost:5000`
+Then you should be able to run the app with `python app.py` or `./start.sh` which then serves a server on `localhost:5000`.
 
 ## 📋 Features
 
@@ -183,19 +182,19 @@ git clone https://github.com/remcostoeten/whatsapp-online-status-tracker.git wha
 cd whatsapp-tracker
 ```
 
-<small>
+3. Install dependencies:
+```shell
+pip install -r requirements.txt
+# or pip3. If having issues, look into app.py, copy the imports into chatgpt and ask for pip installs
+```
 
-3. 
-
- Install dependencies via `pip install requirments.txt` or `pip3`. If that struggles try next step: 3 - B.1. If succesfully ran the installation you're done and can run the app by running `python app.py` in the root directory <small>or `python3` as a rookie would struggle with</small>. And then you should be able to visit `http://localhost:5000` with the app runnning.
-
-3. B - Create and activate virtual environment:
+4. Create and activate virtual environment:
 ```shell
 python -m venv venv
 .\venv\Scripts\activate
 ```
 
-4. Install dependencies:
+5. Install dependencies:
 ```shell
 pip install -r requirements.txt
 ```
@@ -215,7 +214,7 @@ brew install --cask google-chrome
 
 3. Clone or download the repository:
 ```shell
-git clone https://github.com/yourusername/whatsapp-online-status-tracker.git
+git clone https://github.com/remcostoeten/whatsapp-online-status-tracker.git
 cd whatsapp-online-status-tracker
 ```
 
@@ -235,6 +234,8 @@ pip install -r requirements.txt
 1. Start the application:
 ```shell
 python app.py
+## or
+./start.sh
 ```
 
 2. Open your web browser and navigate to:
