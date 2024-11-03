@@ -1,51 +1,713 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script><title>WhatsApp Status Checker</title>
-</head>
-<body>
-    <h1>Check WhatsApp Status</h1>
-    <form action="/check_status" method="post">
-        <label for="name">Name:</label>
-        <input type="text" id="name" name="name" required>
-        <button type="submit">Check Status</button>
-    </form>
-
-
-    <canvas id="myChart"></canvas>
-    <script>
-        fetch('/get_status/name')  // replace 'name' with the actual name
-    .then(response => response.json())
-    .then(data => {
-        const ctx = document.getElementById('myChart').getContext('2d');
-        new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: ['Online Duration', 'Offline Duration'],
-                datasets: [{
-                    label: 'Duration in seconds',
-                    data: [data.online_duration, data.offline_duration],
-                    backgroundColor: [
-                        'rgba(75, 192, 192, 0.2)',
-                        'rgba(255, 99, 132, 0.2)'
-                    ],
-                    borderColor: [
-                        'rgba(75, 192, 192, 1)',
-                        'rgba(255, 99, 132, 1)'
-                    ],
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                scales: {
-                    y: {
-                        beginAtZero: true
-                    }
-                }
-            }
-        });
-    });</script>
-</body>
+   <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>WhatsApp Status Tracker</title>
+      <script src="https://cdn.tailwindcss.com"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+      <style>
+         body {
+         transition: background-color 0.3s, color 0.3s;
+         }
+         body.dark {
+         background-color: #121212;
+         color: #ffffff;
+         }
+         body.dark .bg-white {
+         background-color: #1e1e1e !important;
+         }
+         body.dark .bg-gray-50 {
+         background-color: #262626 !important;
+         }
+         body.dark .text-gray-800 {
+         color: #ffffff !important;
+         }
+         body.dark .text-gray-500 {
+         color: #a0aec0 !important;
+         }
+         body.dark .border {
+         border-color: #2d2d2d !important;
+         }
+         body.dark .shadow-lg,
+         body.dark .shadow-sm {
+         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5) !important;
+         }
+         .theme-toggle {
+         position: fixed;
+         top: 10px;
+         right: 10px;
+         border: none;
+         padding: 10px;
+         cursor: pointer;
+         border-radius: 5px;
+         display: flex;
+         align-items: center;
+         gap: 5px;
+         z-index: 1000;
+         }
+         body:not(.dark) .theme-toggle {
+         background-color: #f3f4f6;
+         color: #1f2937;
+         }
+         body.dark .theme-toggle {
+         background-color: #374151;
+         color: #ffffff;
+         }
+         .chart-container {
+         position: relative;
+         height: 300px;
+         width: 100%;
+         }
+         .status-indicator {
+         display: inline-block;
+         width: 10px;
+         height: 10px;
+         border-radius: 50%;
+         margin-right: 5px;
+         }
+         .status-online {
+         background-color: #22c55e;
+         }
+         .status-offline {
+         background-color: #ef4444;
+         }
+         .loading {
+         position: fixed;
+         top: 0;
+         left: 0;
+         right: 0;
+         bottom: 0;
+         background: rgba(0, 0, 0, 0.5);
+         display: flex;
+         justify-content: center;
+         align-items: center;
+         z-index: 1000;
+         display: none;
+         }
+         .loading-spinner {
+         width: 50px;
+         height: 50px;
+         border: 5px solid #f3f3f3;
+         border-top: 5px solid #3498db;
+         border-radius: 50%;
+         animation: spin 1s linear infinite;
+         }
+         @keyframes spin {
+         0% { transform: rotate(0deg); }
+         100% { transform: rotate(360deg); }
+         }
+         /* Dark mode overrides for statistics cards */
+         body.dark .bg-blue-50 {
+         background-color: rgba(59, 130, 246, 0.1) !important;
+         }
+         body.dark .bg-green-50 {
+         background-color: rgba(34, 197, 94, 0.1) !important;
+         }
+         body.dark .bg-yellow-50 {
+         background-color: rgba(234, 179, 8, 0.1) !important;
+         }
+         body.dark .bg-purple-50 {
+         background-color: rgba(168, 85, 247, 0.1) !important;
+         }
+         /* Dark mode chart customization */
+         body.dark .chart-container canvas {
+         filter: brightness(0.8);
+         }
+         body.dark input,
+         body.dark select {
+         background-color: #262626;
+         color: #ffffff;
+         border-color: #404040;
+         }
+         body.dark input::placeholder {
+         color: #9ca3af;
+         }
+         body.dark input:focus {
+         border-color: #3b82f6;
+         outline: none;
+         }
+      </style>
+   </head>
+   <body class="bg-gray-50">
+      <!-- Loading Overlay -->
+      <div id="loadingOverlay" class="loading">
+         <div class="loading-spinner"></div>
+      </div>
+      <div class="container mx-auto px-4 py-8">
+      <button class="theme-toggle">
+         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"/>
+            <line x1="12" y1="1" x2="12" y2="3"/>
+            <line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/>
+            <line x1="21" y1="12" x2="23" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+         </svg>
+         <span>Theme</span>
+      </button>
+      <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+         <h1 class="text-3xl font-bold mb-6 text-gray-800">WhatsApp Status Tracker</h1>
+         <!-- Input Section -->
+         <div class="mb-8">
+            <div class="flex gap-4 flex-col">
+               <div class="flex-col flex gap-2">
+                  <input type="text" id="contactName" 
+                     class="flex-1 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                     placeholder="Enter contact name"/>
+                  <small>Note! Must be exact name and is case sensitive to be able to click on the</small>
+               </div>
+               <div class="flex gap-2 mb-4">    <button onclick="startTracking()" 
+                  class="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 transition">
+                  Start Tracking
+                  </button>
+                  <button onclick="stopTracking()" 
+                     class="bg-red-500 text-white px-6 py-2 rounded hover:bg-red-600 transition">
+                  Stop Tracking
+                  </button>
+               </div>
+            </div>
+            <!-- Alert Messages -->
+            <div id="alertContainer" class="mb-8 hidden">
+               <div class="p-4 rounded-lg"></div>
+            </div>
+            <!-- Current Status Card -->
+            <div class="bg-white rounded-lg shadow-sm border p-6 mb-8">
+               <div class="flex items-center justify-between">
+                  <h2 class="text-xl font-semibold">Current Status</h2>
+                  <span id="lastUpdate" class="text-sm text-gray-500"></span>
+               </div>
+               <div class="mt-4">
+                  <div id="currentStatus" class="text-2xl font-bold flex items-center">
+                     <span class="status-indicator"></span>
+                     <span class="status-text">Not tracking</span>
+                  </div>
+               </div>
+            </div>
+            <!-- Statistics Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+               <div class="bg-blue-50 p-4 rounded-lg">
+                  <h3 class="font-semibold text-blue-700 mb-2">Total Time Tracked</h3>
+                  <p id="totalTimeTracked" class="text-2xl font-bold text-blue-900">0h 0m</p>
+               </div>
+               <div class="bg-green-50 p-4 rounded-lg">
+                  <h3 class="font-semibold text-green-700 mb-2">Online Duration</h3>
+                  <p id="onlineTime" class="text-2xl font-bold text-green-900">0h 0m</p>
+               </div>
+               <div class="bg-yellow-50 p-4 rounded-lg">
+                  <h3 class="font-semibold text-yellow-700 mb-2">Online Percentage</h3>
+                  <p id="onlinePercentage" class="text-2xl font-bold text-yellow-900">0%</p>
+               </div>
+               <div class="bg-purple-50 p-4 rounded-lg">
+                  <h3 class="font-semibold text-purple-700 mb-2">Status Changes</h3>
+                  <p id="statusChanges" class="text-2xl font-bold text-purple-900">0</p>
+               </div>
+            </div>
+            <!-- Charts Section -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+               <!-- Activity Timeline -->
+               <div class="bg-white p-6 rounded-lg shadow-sm border">
+                  <h2 class="text-xl font-semibold mb-4">Activity Timeline</h2>
+                  <div class="chart-container">
+                     <canvas id="timelineChart"></canvas>
+                  </div>
+               </div>
+               <!-- Daily Pattern -->
+               <div class="bg-white p-6 rounded-lg shadow-sm border">
+                  <h2 class="text-xl font-semibold mb-4">Daily Pattern</h2>
+                  <div class="chart-container">
+                     <canvas id="patternChart"></canvas>
+                  </div>
+               </div>
+            </div>
+            <!-- History Section -->
+            <div class="bg-white p-6 rounded-lg shadow-sm border">
+               <div class="flex justify-between items-center mb-4">
+                  <h2 class="text-xl font-semibold">Status History</h2>
+                  <div class="flex gap-2">
+                     <select id="historyLimit" class="border rounded p-2">
+                        <option value="20">20 entries</option>
+                        <option value="50">50 entries</option>
+                        <option value="100">100 entries</option>
+                     </select>
+                     <button onclick="clearHistory()" 
+                        class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 transition">
+                     Clear History
+                     </button>
+                  </div>
+               </div>
+               <div class="overflow-x-auto">
+                  <table class="min-w-full table-auto">
+                     <thead>
+                        <tr class="bg-gray-50">
+                           <th class="px-4 py-2 text-left">Time</th>
+                           <th class="px-4 py-2 text-left">Status</th>
+                           <th class="px-4 py-2 text-left">Duration</th>
+                        </tr>
+                     </thead>
+                     <tbody id="historyTable"></tbody>
+                  </table>
+               </div>
+               <div id="loadMoreContainer" class="mt-4 text-center hidden">
+                  <button onclick="loadMoreHistory()" 
+                     class="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 transition">
+                  Load More
+                  </button>
+               </div>
+            </div>
+         </div>
+      </div>
+      <script>
+         let pollingInterval;
+         let historyData = [];
+         let currentPage = 1;
+         let timelineChart = null;
+         let patternChart = null;
+         let currentContact = null;
+         
+         document.addEventListener('DOMContentLoaded', (event) => {
+         const toggleButton = document.querySelector('.theme-toggle');
+         const currentTheme = localStorage.getItem('theme') || 'light';
+         
+         // Apply theme on initial load
+         if (currentTheme === 'dark') {
+          document.body.classList.add('dark');
+          updateChartTheme(true);
+         }
+         
+         // Toggle theme
+         toggleButton.addEventListener('click', () => {
+          document.body.classList.toggle('dark');
+          const isDark = document.body.classList.contains('dark');
+          localStorage.setItem('theme', isDark ? 'dark' : 'light');
+          updateChartTheme(isDark);
+         });
+         
+         // Function to update chart theme
+         function updateChartTheme(isDark) {
+          const chartDefaults = {
+              color: isDark ? '#ffffff' : '#666666',
+              borderColor: isDark ? '#404040' : '#e5e7eb',
+              grid: {
+                  color: isDark ? '#404040' : '#e5e7eb'
+              }
+          };
+         
+          Chart.defaults.color = chartDefaults.color;
+          Chart.defaults.borderColor = chartDefaults.borderColor;
+          
+          // Update existing charts if they exist
+          if (window.timelineChart) {
+              timelineChart.options.scales.x.grid.color = chartDefaults.grid.color;
+              timelineChart.options.scales.y.grid.color = chartDefaults.grid.color;
+              timelineChart.update();
+          }
+          
+          if (window.patternChart) {
+              patternChart.options.scales.x.grid.color = chartDefaults.grid.color;
+              patternChart.options.scales.y.grid.color = chartDefaults.grid.color;
+              patternChart.update();
+          }
+         }
+         });
+         
+         document.getElementById('historyLimit').addEventListener('change', function() {
+         if (historyData.length) {
+         updateHistory(historyData);
+         }
+         });
+         
+         // Show/hide loading overlay
+         function toggleLoading(show) {
+         document.getElementById('loadingOverlay').style.display = show ? 'flex' : 'none';
+         }
+         
+         // Show alert message
+         function showAlert(message, type) {
+         const alertContainer = document.getElementById('alertContainer');
+         const alertDiv = alertContainer.querySelector('div');
+         
+         alertDiv.className = `p-4 rounded-lg ${
+         type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+         }`;
+         alertDiv.textContent = message;
+         alertContainer.classList.remove('hidden');
+         
+         setTimeout(() => {
+         alertContainer.classList.add('hidden');
+         }, 5000);
+         }
+         
+         async function startTracking() {
+         const name = document.getElementById('contactName').value;
+         if (!name) {
+         showAlert('Please enter a contact name', 'error');
+         return;
+         }
+         
+         toggleLoading(true);
+         try {
+         const response = await fetch('/check_status', {
+             method: 'POST',
+             headers: {
+                 'Content-Type': 'application/x-www-form-urlencoded',
+             },
+             body: `name=${encodeURIComponent(name)}`
+         });
+         
+         const data = await response.json();
+         if (data.error) {
+             showAlert(data.error, 'error');
+         } else {
+             showAlert('Status tracking started', 'success');
+             currentContact = name;
+             startStatusPolling(name);
+         }
+         } catch (error) {
+         showAlert('Failed to start tracking', 'error');
+         } finally {
+         toggleLoading(false);
+         }
+         }
+         
+         async function stopTracking() {
+         if (!currentContact) {
+         showAlert('No active tracking session', 'error');
+         return;
+         }
+         
+         toggleLoading(true);
+         try {
+         const response = await fetch('/stop_checking', {
+             method: 'POST'
+         });
+         
+         const data = await response.json();
+         if (data.error) {
+             showAlert(data.error, 'error');
+         } else {
+             showAlert('Status tracking stopped', 'success');
+             if (pollingInterval) {
+                 clearInterval(pollingInterval);
+                 pollingInterval = null;
+             }
+             currentContact = null;
+         }
+         } catch (error) {
+         showAlert('Failed to stop tracking', 'error');
+         } finally {
+         toggleLoading(false);
+         }
+         }
+         
+         function startStatusPolling(name) {
+         if (pollingInterval) {
+         clearInterval(pollingInterval);
+         }
+         
+         // Initialize charts if not already done
+         if (!timelineChart || !patternChart) {
+         initializeCharts();
+         }
+         
+         // Initial data fetch
+         fetchAndUpdateStatus(name);
+         
+         // Start polling
+         pollingInterval = setInterval(() => {
+         fetchAndUpdateStatus(name);
+         }, 5000);
+         }
+         
+         async function fetchAndUpdateStatus(name) {
+         try {
+         const response = await fetch(`/get_status/${encodeURIComponent(name)}`);
+         const data = await response.json();
+         
+         if (!data.error) {
+             updateUI(data);
+         }
+         } catch (error) {
+         console.error('Error fetching status:', error);
+         }
+         }
+         
+         function updateUI(data) {
+         // Update current status
+         const currentStatus = document.getElementById('currentStatus');
+         const statusIndicator = currentStatus.querySelector('.status-indicator');
+         const statusText = currentStatus.querySelector('.status-text');
+         
+         statusIndicator.className = `status-indicator ${
+         data.current.status === 'Online' ? 'status-online' : 'status-offline'
+         }`;
+         statusText.textContent = data.current.status;
+         
+         // Update last update time
+         document.getElementById('lastUpdate').textContent = 
+         `Last updated: ${moment(data.current.timestamp).format('HH:mm:ss')}`;
+         
+         // Update statistics
+         const stats = data.statistics;
+         document.getElementById('totalTimeTracked').textContent = 
+         formatDuration(stats.total_time);
+         document.getElementById('onlineTime').textContent = 
+         formatDuration(stats.online_time);
+         document.getElementById('onlinePercentage').textContent = 
+         `${stats.online_percentage.toFixed(1)}%`;
+         document.getElementById('statusChanges').textContent = 
+         stats.status_changes;
+         
+         // Update charts
+         updateCharts(data);
+         
+         // Update history table
+         updateHistory(data.history);
+         }
+         
+         function formatDuration(seconds) {
+         const hours = Math.floor(seconds / 3600);
+         const minutes = Math.floor((seconds % 3600) / 60);
+         return `${hours}h ${minutes}m`;
+         }
+         
+         function initializeCharts() {
+         // Timeline Chart
+         const timelineCtx = document.getElementById('timelineChart').getContext('2d');
+         timelineChart = new Chart(timelineCtx, {
+         type: 'line',
+         data: {
+             labels: [],
+             datasets: [{
+                 label: 'Online Status',
+                 data: [],
+                 borderColor: 'rgb(59, 130, 246)',
+                 tension: 0.1,
+                 stepped: true
+             }]
+         },
+         options: {
+             responsive: true,
+             maintainAspectRatio: false,
+             scales: {
+                 y: {
+                     beginAtZero: true,
+                     max: 1,
+                     ticks: {
+                         callback: value => value === 1 ? 'Online' : 'Offline'
+                     }
+                 }
+             },
+             plugins: {
+                 legend: {
+                     display: false
+                 }
+             }
+         }
+         });
+         
+         // Pattern Chart
+         const patternCtx = document.getElementById('patternChart').getContext('2d');
+         patternChart = new Chart(patternCtx, {
+         type: 'bar',
+         data: {
+             labels: Array.from({length: 24}, (_, i) => `${i}:00`),
+             datasets: [{
+                 label: 'Online Percentage',
+                 data: new Array(24).fill(0),
+                 backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                 borderColor: 'rgb(59, 130, 246)',
+                 borderWidth: 1
+             }]
+         },
+         options: {
+             responsive: true,
+             maintainAspectRatio: false,
+             scales: {
+                 y: {
+                     beginAtZero: true,
+                     max: 100,
+                     ticks: {
+                         callback: value => `${value}%`
+                     }
+                 }
+             }
+         }
+         });
+         }
+         
+         function updateCharts(data) {
+         if (!timelineChart || !patternChart) return;
+         
+         // Update Timeline Chart
+         const timelineData = data.history.slice(-50).map(item => ({
+         x: moment(item.timestamp).format('HH:mm:ss'),
+         y: item.status === 'Online' ? 1 : 0
+         }));
+         
+         timelineChart.data.labels = timelineData.map(d => d.x);
+         timelineChart.data.datasets[0].data = timelineData.map(d => d.y);
+         timelineChart.update();
+         
+         // Update Pattern Chart
+         patternChart.data.datasets[0].data = data.statistics.hourly_pattern;
+         patternChart.update();
+         }
+         
+         function updateHistory(history) {
+         const tbody = document.getElementById('historyTable');
+         const limit = parseInt(document.getElementById('historyLimit').value);
+         tbody.innerHTML = '';
+         
+         history.slice(0, limit).forEach((item, index) => {
+         const row = document.createElement('tr');
+         row.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+         
+         const time = moment(item.timestamp).format('HH:mm:ss');
+         const duration = index < history.length - 1 
+             ? moment.duration(
+                 moment(item.timestamp).diff(moment(history[index + 1].timestamp))
+             ).humanize()
+             : '';
+         
+         row.innerHTML = `
+             <td class="px-4 py-2">${time}</td>
+             <td class="px-4 py-2">
+                 <span class="inline-flex items-center">
+                     <span class="status-indicator ${
+                         item.status === 'Online' ? 'status-online' : 'status-offline'
+                     }"></span>
+                     ${item.status}
+                 </span>
+             </td>
+             <td class="px-4 py-2">${duration}</td>
+         `;
+         tbody.appendChild(row);
+         });
+         
+         // Show/hide load more button
+         document.getElementById('loadMoreContainer').style.display = 
+         history.length > limit ? 'block' : 'none';
+         }
+         
+         async function clearHistory() {
+         if (!currentContact) {
+         showAlert('No contact selected', 'error');
+         return;
+         }
+         
+         if (!confirm('Are you sure you want to clear all history data?')) {
+         return;
+         }
+         
+         toggleLoading(true);
+         try {
+         const response = await fetch(`/clear_data/${encodeURIComponent(currentContact)}`, {
+             method: 'POST'
+         });
+         
+         const data = await response.json();
+         if (data.error) {
+             showAlert(data.error, 'error');
+         } else {
+             showAlert('History cleared successfully', 'success');
+             // Reset UI
+             document.getElementById('historyTable').innerHTML = '';
+             document.getElementById('totalTimeTracked').textContent = '0h 0m';
+             document.getElementById('onlineTime').textContent = '0h 0m';
+             document.getElementById('onlinePercentage').textContent = '0%';
+             document.getElementById('statusChanges').textContent = '0';
+             
+             // Reset charts
+             if (timelineChart) {
+                 timelineChart.data.labels = [];
+                 timelineChart.data.datasets[0].data = [];
+                 timelineChart.update();
+             }
+             if (patternChart) {
+                 patternChart.data.datasets[0].data = new Array(24).fill(0);
+                 patternChart.update();
+             }
+         }
+         } catch (error) {
+         showAlert('Failed to clear history', 'error');
+         } finally {
+         toggleLoading(false);
+         }
+         }
+         
+         // Export data functionality
+         function exportData() {
+         if (!currentContact || !historyData.length) {
+         showAlert('No data to export', 'error');
+         return;
+         }
+         
+         const data = {
+         contact: currentContact,
+         exportDate: new Date().toISOString(),
+         history: historyData,
+         statistics: {
+             totalTime: document.getElementById('totalTimeTracked').textContent,
+             onlineTime: document.getElementById('onlineTime').textContent,
+             onlinePercentage: document.getElementById('onlinePercentage').textContent,
+             statusChanges: document.getElementById('statusChanges').textContent
+         }
+         };
+         
+         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+         const url = window.URL.createObjectURL(blob);
+         const a = document.createElement('a');
+         a.href = url;
+         a.download = `whatsapp-status-${currentContact}-${moment().format('YYYY-MM-DD')}.json`;
+         a.click();
+         window.URL.revokeObjectURL(url);
+         }
+         
+         // Handle page visibility changes
+         document.addEventListener('visibilitychange', () => {
+         if (document.hidden) {
+         // Page is hidden, stop polling
+         if (pollingInterval) {
+             clearInterval(pollingInterval);
+             pollingInterval = null;
+         }
+         } else {
+         // Page is visible again, restart polling if we have an active contact
+         if (currentContact && !pollingInterval) {
+             startStatusPolling(currentContact);
+         }
+         }
+         });
+         
+         // Handle limit changes
+         document.getElementById('historyLimit').addEventListener('change', function() {
+         if (historyData.length) {
+         updateHistory(historyData);
+         }
+         });
+         
+         // Initialize tooltips
+         const tooltips = document.querySelectorAll('[data-tooltip]');
+         tooltips.forEach(tooltip => {
+         tooltip.addEventListener('mouseover', (e) => {
+         const tip = document.createElement('div');
+         tip.className = 'absolute bg-gray-900 text-white p-2 rounded text-sm z-50';
+         tip.style.top = `${e.pageY + 10}px`;
+         tip.style.left = `${e.pageX + 10}px`;
+         tip.textContent = e.target.dataset.tooltip;
+         document.body.appendChild(tip);
+         
+         e.target.addEventListener('mouseout', () => tip.remove(), { once: true });
+         });
+         });
+         
+         // Initial chart setup
+         initializeCharts();
+      </script>
+   </body>
 </html>
